@@ -8,8 +8,6 @@ export default function PreviewScreen() {
   async function handleAnalyze() {
     const base64Image = await imageToBase64(photoUri as string);
 
-    console.log("Base64 Length:", base64Image.length);
-
     router.push({
       pathname: "/result",
       params: {

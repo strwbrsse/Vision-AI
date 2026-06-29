@@ -2,25 +2,19 @@ import * as FileSystem from "expo-file-system/legacy";
 
 const GEMINI_KEY = process.env.EXPO_PUBLIC_GEMINI_KEY;
 
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
-
-export async function imageToBase64(uri: string): Promise<string> {
-  const base64 = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
-  return base64;
-}
+const GEMINI_URL =
+  `https://generativelanguage.googleapis.com/v1beta/models/` +
+  `gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
 
 export const ANALYSIS_PROMPT = `
 Analyze this image. Identify:
 
-1. Objects - list the distinct physical objects you see
-2. Context - briefly describe the setting or scene
-3. Activities - what activity appears to be happening, if any
-4. Recommendations - one practical suggestion based on the scene
+1. Objects - list the distinct physical objects you see.
+2. Context - briefly describe the setting or scene.
+3. Activities - what activity appears to be happening, if any.
+4. Recommendations - one practical suggestion based on the scene.
 
-Respond ONLY with valid JSON in this exact shape:
+Respond ONLY with valid JSON in this exact format:
 
 {
   "objects": ["...", "..."],
@@ -29,6 +23,14 @@ Respond ONLY with valid JSON in this exact shape:
   "recommendations": "..."
 }
 `;
+
+export async function imageToBase64(uri: string): Promise<string> {
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  return base64;
+}
 
 export async function analyzeImage(base64Image: string, prompt: string) {
   const response = await fetch(GEMINI_URL, {
@@ -58,6 +60,8 @@ export async function analyzeImage(base64Image: string, prompt: string) {
   console.log("HTTP Status:", response.status);
 
   const json = await response.json();
+
+  console.log("Gemini Response:", JSON.stringify(json, null, 2));
 
   return json;
 }
