@@ -1,6 +1,11 @@
+import { useLocalSearchParams } from "expo-router";
 import { Text, View } from "react-native";
 
 export default function ResultScreen() {
+  const { base64Image } = useLocalSearchParams();
+
+  console.log("Received Base64:", (base64Image as string)?.length);
+
   return (
     <View
       style={{
@@ -9,7 +14,9 @@ export default function ResultScreen() {
         alignItems: "center",
       }}
     >
-      <Text>Result Screen (Coming in Phase 5)</Text>
+      <Text>Result Screen</Text>
+
+      <Text>Base64 received successfully!</Text>
     </View>
   );
 }
