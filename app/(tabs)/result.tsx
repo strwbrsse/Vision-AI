@@ -21,7 +21,9 @@ export default function ResultScreen() {
   const { base64Image, promptKey } = useLocalSearchParams();
 
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+
   const [loading, setLoading] = useState(true);
+
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -37,24 +39,29 @@ export default function ResultScreen() {
 
       const result = await analyzeImage(base64Image as string, prompt);
 
-      let textPart = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (!textPart) {
-        throw new Error("Empty response from Gemini");
+      // Show Gemini API error
+      if (result.error) {
+        throw new Error(result.error.message);
       }
 
-      // Remove Markdown code fences if Gemini returns them
-      textPart = textPart
+      const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text) {
+        throw new Error("Gemini returned an empty response.");
+      }
+
+      const cleanText = text
         .replace(/```json/g, "")
         .replace(/```/g, "")
         .trim();
 
-      const parsed: Analysis = JSON.parse(textPart);
+      const parsed = JSON.parse(cleanText);
 
       setAnalysis(parsed);
-    } catch (err) {
-      console.log(err);
-      setError("Could not analyze this image. Please try again.");
+    } catch (err: any) {
+      console.log("Analysis Error:", err);
+
+      setError(err.message ?? "Could not analyze this image.");
     } finally {
       setLoading(false);
     }
@@ -80,7 +87,7 @@ export default function ResultScreen() {
   if (!analysis) {
     return (
       <View style={styles.centered}>
-        <Text>No analysis available.</Text>
+        <Text>No analysis found.</Text>
       </View>
     );
   }
@@ -96,12 +103,15 @@ export default function ResultScreen() {
       ))}
 
       <Text style={styles.sectionTitle}>Context</Text>
+
       <Text style={styles.bodyText}>{analysis.context}</Text>
 
       <Text style={styles.sectionTitle}>Activities</Text>
+
       <Text style={styles.bodyText}>{analysis.activities}</Text>
 
       <Text style={styles.sectionTitle}>Recommendations</Text>
+
       <Text style={styles.bodyText}>{analysis.recommendations}</Text>
     </ScrollView>
   );

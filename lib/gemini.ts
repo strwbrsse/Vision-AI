@@ -1,3 +1,4 @@
+import { File } from "expo-file-system";
 
 const GEMINI_KEY = process.env.EXPO_PUBLIC_GEMINI_KEY;
 
@@ -7,77 +8,65 @@ const GEMINI_URL =
 
 export const PROMPTS = {
   academic: `
+Analyze this image.
+
+Identify:
+1. Objects
+2. Context
+3. Activities
+4. Recommendations
+
 Respond ONLY with valid JSON.
 
 {
-  "objects": [],
-  "context": "",
-  "activities": "",
-  "recommendations": ""
+  "objects": ["...", "..."],
+  "context": "...",
+  "activities": "...",
+  "recommendations": "..."
 }
-
-Act as a university professor.
-
-Analyze this image and provide:
-1. Objects present
-2. Educational context
-3. Activities happening
-4. One constructive academic recommendation.
 `,
 
   safety: `
+Act as a workplace safety inspector.
+
+Analyze this image.
+
 Respond ONLY with valid JSON.
 
 {
   "objects": [],
-  "context": "",
-  "activities": "",
-  "recommendations": ""
+  "context": "...",
+  "activities": "...",
+  "recommendations": "List any safety hazards. If none exist, say so."
 }
-
-Act as a workplace safety inspector.
-
-Analyze this image and identify:
-1. Objects
-2. Safety hazards
-3. Risks
-4. Safety recommendations.
-
-If there are no hazards, clearly state that.
 `,
 
   inventory: `
+Act as an inventory manager.
+
+List every visible asset.
+
 Respond ONLY with valid JSON.
 
 {
   "objects": [],
-  "context": "",
-  "activities": "",
-  "recommendations": ""
+  "context": "Inventory",
+  "activities": "None",
+  "recommendations": "None"
 }
-
-Act as an inventory manager.
-
-List all visible assets in the image.
-Keep responses concise.
 `,
-} as const;
+};
 
 export async function imageToBase64(uri: string): Promise<string> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  const file = new File(uri);
 
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+  const base64 = await file.base64();
 
-    reader.onloadend = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      resolve(base64);
-    };
+  if (!base64) {
+    throw new Error("Failed to convert image to Base64.");
+  }
 
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  return base64;
 }
 
 export async function analyzeImage(base64Image: string, prompt: string) {
@@ -90,9 +79,7 @@ export async function analyzeImage(base64Image: string, prompt: string) {
       contents: [
         {
           parts: [
-            {
-              text: prompt,
-            },
+            { text: prompt },
             {
               inline_data: {
                 mime_type: "image/jpeg",
@@ -105,11 +92,10 @@ export async function analyzeImage(base64Image: string, prompt: string) {
     }),
   });
 
-  console.log("HTTP Status:", response.status);
-
   const json = await response.json();
 
-  console.log("Gemini Response:", json);
+  console.log("HTTP Status:", response.status);
+  console.log("Gemini Response:", JSON.stringify(json, null, 2));
 
   return json;
 }
