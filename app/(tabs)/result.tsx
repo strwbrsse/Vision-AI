@@ -8,7 +8,7 @@ import {
     View,
 } from "react-native";
 
-import { ANALYSIS_PROMPT, analyzeImage } from "../../lib/gemini";
+import { analyzeImage, PROMPTS } from "../../lib/gemini";
 
 interface Analysis {
   objects: string[];
@@ -18,7 +18,7 @@ interface Analysis {
 }
 
 export default function ResultScreen() {
-  const { base64Image } = useLocalSearchParams();
+  const { base64Image, promptKey } = useLocalSearchParams();
 
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,26 +33,27 @@ export default function ResultScreen() {
     setError("");
 
     try {
-      const result = await analyzeImage(base64Image as string, ANALYSIS_PROMPT);
+      const prompt = PROMPTS[(promptKey as keyof typeof PROMPTS) ?? "academic"];
 
-      let text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+      const result = await analyzeImage(base64Image as string, prompt);
 
-      if (!text) {
+      let textPart = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!textPart) {
         throw new Error("Empty response from Gemini");
       }
 
       // Remove Markdown code fences if Gemini returns them
-      text = text
+      textPart = textPart
         .replace(/```json/g, "")
         .replace(/```/g, "")
         .trim();
 
-      const parsed = JSON.parse(text);
+      const parsed: Analysis = JSON.parse(textPart);
 
       setAnalysis(parsed);
     } catch (err) {
       console.log(err);
-
       setError("Could not analyze this image. Please try again.");
     } finally {
       setLoading(false);
@@ -95,15 +96,12 @@ export default function ResultScreen() {
       ))}
 
       <Text style={styles.sectionTitle}>Context</Text>
-
       <Text style={styles.bodyText}>{analysis.context}</Text>
 
       <Text style={styles.sectionTitle}>Activities</Text>
-
       <Text style={styles.bodyText}>{analysis.activities}</Text>
 
       <Text style={styles.sectionTitle}>Recommendations</Text>
-
       <Text style={styles.bodyText}>{analysis.recommendations}</Text>
     </ScrollView>
   );
