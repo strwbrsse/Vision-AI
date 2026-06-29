@@ -1,101 +1,121 @@
-import { File } from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 const GEMINI_KEY = process.env.EXPO_PUBLIC_GEMINI_KEY;
 
-const GEMINI_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/` +
-  `gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
 
-export const PROMPTS = {
-  academic: `
-Analyze this image.
+export const PROMPTS: Record<string, string> = {
+  academic: `Act as a university professor. Looking at this image, provide an academic-style analysis.
 
-Identify:
-1. Objects
-2. Context
-3. Activities
-4. Recommendations
-
-Respond ONLY with valid JSON.
+Respond ONLY with valid JSON in this exact shape, no extra text:
 
 {
   "objects": ["...", "..."],
-  "context": "...",
-  "activities": "...",
-  "recommendations": "..."
-}
-`,
+  "context": "Describe the educational context of the scene",
+  "activities": "What learning or academic activity appears to be happening",
+  "recommendations": "One piece of constructive academic feedback"
+}`,
 
-  safety: `
-Act as a workplace safety inspector.
+  safety: `Act as a workplace safety inspector. Looking at this image, identify any visible hazards, risks, or safety concerns. If none are visible, state that clearly.
 
-Analyze this image.
-
-Respond ONLY with valid JSON.
+Respond ONLY with valid JSON in this exact shape, no extra text:
 
 {
-  "objects": [],
-  "context": "...",
-  "activities": "...",
-  "recommendations": "List any safety hazards. If none exist, say so."
-}
-`,
+  "objects": ["...", "..."],
+  "context": "Describe the environment from a safety perspective",
+  "activities": "What activities or behaviors are occurring that may pose risk",
+  "recommendations": "Your top safety recommendation, or 'No hazards identified'"
+}`,
 
-  inventory: `
-Act as an inventory manager.
+  inventory: `Act as an asset management clerk. Looking at this image, list every visible physical asset as a clean inventory list, with no extra commentary.
 
-List every visible asset.
-
-Respond ONLY with valid JSON.
+Respond ONLY with valid JSON in this exact shape, no extra text:
 
 {
-  "objects": [],
-  "context": "Inventory",
-  "activities": "None",
-  "recommendations": "None"
-}
-`,
+  "objects": ["...", "..."],
+  "context": "Location or area type where assets are stored",
+  "activities": "Current state or condition of the assets",
+  "recommendations": "Any asset management action required"
+}`,
 };
 
+export const ANALYSIS_PROMPT = PROMPTS.academic;
+
 export async function imageToBase64(uri: string): Promise<string> {
-  const file = new File(uri);
+  return await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+}
 
-  const base64 = await file.base64();
-
-  if (!base64) {
-    throw new Error("Failed to convert image to Base64.");
-  }
-
-  return base64;
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function analyzeImage(base64Image: string, prompt: string) {
-  const response = await fetch(GEMINI_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: prompt },
+  const MAX_RETRIES = 3;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(GEMINI_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
             {
-              inline_data: {
-                mime_type: "image/jpeg",
-                data: base64Image,
-              },
+              parts: [
+                {
+                  text: prompt,
+                },
+                {
+                  inline_data: {
+                    mime_type: "image/jpeg",
+                    data: base64Image,
+                  },
+                },
+              ],
             },
           ],
-        },
-      ],
-    }),
-  });
+        }),
+      });
 
-  const json = await response.json();
+      if (response.ok) {
+        const json = await response.json();
 
-  console.log("HTTP Status:", response.status);
-  console.log("Gemini Response:", JSON.stringify(json, null, 2));
+        console.log("====================================");
+        console.log("Gemini Success");
+        console.log(JSON.stringify(json, null, 2));
+        console.log("====================================");
 
-  return json;
+        return json;
+      }
+
+      const errorText = await response.text();
+
+      console.log("====================================");
+      console.log("Gemini Status:", response.status);
+      console.log("Gemini Error:", errorText);
+      console.log("====================================");
+
+      if (response.status === 503 && attempt < MAX_RETRIES) {
+        console.log(`Gemini busy. Retrying ${attempt}/${MAX_RETRIES}...`);
+
+        await delay(2000);
+        continue;
+      }
+
+      throw new Error(`Gemini API Error: ${response.status}`);
+    } catch (error) {
+      if (attempt === MAX_RETRIES) {
+        throw error;
+      }
+
+      console.log(`Retrying request (${attempt}/${MAX_RETRIES})...`);
+
+      await delay(2000);
+    }
+  }
+
+  throw new Error("Gemini request failed after multiple retries.");
 }

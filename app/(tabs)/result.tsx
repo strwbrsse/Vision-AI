@@ -1,11 +1,15 @@
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { analyzeImage, PROMPTS } from "../../lib/gemini";
@@ -18,13 +22,12 @@ interface Analysis {
 }
 
 export default function ResultScreen() {
-  const { base64Image, promptKey } = useLocalSearchParams();
+  const { imageUri, base64Image, promptKey } = useLocalSearchParams();
 
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
-
   const [loading, setLoading] = useState(true);
-
   const [error, setError] = useState("");
+  const [showImage, setShowImage] = useState(false);
 
   useEffect(() => {
     runAnalysis();
@@ -39,7 +42,6 @@ export default function ResultScreen() {
 
       const result = await analyzeImage(base64Image as string, prompt);
 
-      // Show Gemini API error
       if (result.error) {
         throw new Error(result.error.message);
       }
@@ -55,13 +57,19 @@ export default function ResultScreen() {
         .replace(/```/g, "")
         .trim();
 
-      const parsed = JSON.parse(cleanText);
+      const parsed: Analysis = JSON.parse(cleanText);
 
       setAnalysis(parsed);
     } catch (err: any) {
-      console.log("Analysis Error:", err);
+      console.log(err);
 
-      setError(err.message ?? "Could not analyze this image.");
+      if (err.message?.includes("503")) {
+        setError(
+          "The AI service is currently busy.\n\nPlease try again in a few moments.",
+        );
+      } else {
+        setError(err.message ?? "Unable to analyze image.");
+      }
     } finally {
       setLoading(false);
     }
@@ -71,7 +79,12 @@ export default function ResultScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#5B3FA3" />
-        <Text style={styles.loadingText}>Analyzing image...</Text>
+
+        <Text style={styles.loadingTitle}>
+          🤖 VisionAI is analyzing your image...
+        </Text>
+
+        <Text style={styles.loadingSubtitle}>Please wait a few seconds.</Text>
       </View>
     );
   }
@@ -80,6 +93,13 @@ export default function ResultScreen() {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>{error}</Text>
+
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => router.replace("/camera")}
+        >
+          <Text style={styles.retryText}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -87,40 +107,94 @@ export default function ResultScreen() {
   if (!analysis) {
     return (
       <View style={styles.centered}>
-        <Text>No analysis found.</Text>
+        <Text>No analysis available.</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.sectionTitle}>Objects</Text>
+    <>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <Text style={styles.title}>VisionAI Results</Text>
 
-      {analysis.objects.map((obj, index) => (
-        <Text key={index} style={styles.listItem}>
-          • {obj}
+        <Text style={styles.modeBadge}>
+          {String(promptKey).toUpperCase()} MODE
         </Text>
-      ))}
 
-      <Text style={styles.sectionTitle}>Context</Text>
+        {imageUri ? (
+          <Pressable onPress={() => setShowImage(true)}>
+            <Image
+              source={{ uri: imageUri as string }}
+              style={styles.image}
+              resizeMode="cover"
+            />
+          </Pressable>
+        ) : null}
 
-      <Text style={styles.bodyText}>{analysis.context}</Text>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Detected Objects</Text>
 
-      <Text style={styles.sectionTitle}>Activities</Text>
+          {analysis.objects.length > 0 ? (
+            analysis.objects.map((obj, index) => (
+              <Text key={index} style={styles.listItem}>
+                • {obj}
+              </Text>
+            ))
+          ) : (
+            <Text style={styles.bodyText}>No objects detected.</Text>
+          )}
+        </View>
 
-      <Text style={styles.bodyText}>{analysis.activities}</Text>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Context</Text>
 
-      <Text style={styles.sectionTitle}>Recommendations</Text>
+          <Text style={styles.bodyText}>{analysis.context}</Text>
+        </View>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Activities</Text>
 
-      <Text style={styles.bodyText}>{analysis.recommendations}</Text>
-    </ScrollView>
+          <Text style={styles.bodyText}>{analysis.activities}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Recommendations</Text>
+
+          <Text style={styles.bodyText}>{analysis.recommendations}</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.analyzeAgainButton}
+          onPress={() => router.replace("/camera")}
+        >
+          <Text style={styles.analyzeAgainText}>📷 Analyze Another Image</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      <Modal visible={showImage} animationType="fade" transparent>
+        <Pressable
+          style={styles.modalContainer}
+          onPress={() => setShowImage(false)}
+        >
+          <Image
+            source={{ uri: imageUri as string }}
+            style={styles.fullImage}
+            resizeMode="contain"
+          />
+
+          <Text style={styles.closeText}>Tap anywhere to close</Text>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    backgroundColor: "#F5F7FB",
+    paddingHorizontal: 20,
     paddingTop: 60,
   },
 
@@ -128,35 +202,140 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 24,
+    backgroundColor: "#F5F7FB",
   },
 
-  loadingText: {
-    marginTop: 12,
-    color: "#5A6472",
+  title: {
+    fontSize: 30,
+    fontWeight: "bold",
+    textAlign: "center",
+    color: "#1F2A44",
+    marginBottom: 10,
+  },
+
+  loadingTitle: {
+    marginTop: 20,
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#1F2A44",
+    textAlign: "center",
+  },
+
+  loadingSubtitle: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
   },
 
   errorText: {
+    fontSize: 17,
     color: "#B3261E",
     textAlign: "center",
+    lineHeight: 24,
+  },
+
+  retryButton: {
+    marginTop: 25,
+    backgroundColor: "#5B3FA3",
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    borderRadius: 12,
+  },
+
+  retryText: {
+    color: "#fff",
+    fontWeight: "bold",
     fontSize: 16,
+  },
+
+  modeBadge: {
+    alignSelf: "center",
+    backgroundColor: "#5B3FA3",
+    color: "#fff",
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+    fontWeight: "bold",
+    marginBottom: 18,
+    overflow: "hidden",
+  },
+
+  image: {
+    width: "100%",
+    height: 260,
+    borderRadius: 18,
+    marginBottom: 22,
+  },
+
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 18,
+
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+
+    elevation: 5,
   },
 
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "bold",
-    marginTop: 18,
     color: "#1F2A44",
-  },
-
-  listItem: {
-    fontSize: 16,
-    marginTop: 6,
+    marginBottom: 12,
   },
 
   bodyText: {
     fontSize: 16,
-    marginTop: 6,
-    color: "#2B2F38",
+    color: "#333",
+    lineHeight: 25,
+  },
+
+  listItem: {
+    fontSize: 16,
+    color: "#333",
+    marginBottom: 8,
+    lineHeight: 24,
+  },
+
+  analyzeAgainButton: {
+    backgroundColor: "#5B3FA3",
+    paddingVertical: 18,
+    borderRadius: 15,
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 40,
+  },
+
+  analyzeAgainText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  fullImage: {
+    width: "100%",
+    height: "80%",
+  },
+
+  closeText: {
+    color: "#fff",
+    marginTop: 20,
+    fontSize: 16,
   },
 });

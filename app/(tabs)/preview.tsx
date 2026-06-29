@@ -7,15 +7,20 @@ export default function PreviewScreen() {
   const { photoUri } = useLocalSearchParams();
 
   async function goAnalyze(promptKey: "academic" | "safety" | "inventory") {
-    const base64Image = await imageToBase64(photoUri as string);
+    try {
+      const base64Image = await imageToBase64(photoUri as string);
 
-    router.push({
-      pathname: "/result",
-      params: {
-        base64Image,
-        promptKey,
-      },
-    });
+      router.push({
+        pathname: "/result",
+        params: {
+          imageUri: photoUri as string, // <-- Pass image URI
+          base64Image,
+          promptKey,
+        },
+      });
+    } catch (error) {
+      console.log("Preview Error:", error);
+    }
   }
 
   return (
